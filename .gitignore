@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 配置与密钥（含 API key，不入库）
+config.yaml
+
+# 运行时数据（SQLite 数据库及日志）
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
