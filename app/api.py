@@ -7,10 +7,10 @@ from collections import defaultdict, deque
 from datetime import datetime
 
 from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import crawler, db, load_config, pipeline, processor, tavily_search as tv
+from . import crawler, db, feeds, load_config, pipeline, processor, tavily_search as tv
 from . import worddict
 
 log = logging.getLogger("api")
@@ -145,6 +145,37 @@ def api_sections():
             configured.append(s["section"])
     counts = {r["section"]: r["count"] for r in db.get_sections()}
     return {"sections": [{"name": s, "count": counts.get(s, 0)} for s in configured]}
+
+
+# ---------- robots.txt / sitemap.xml / RSS ----------
+# 三者都是站点级入口，不属于 /api/ 命名空间，也不参与限流。
+# Cloudflare 开启 Bot Preference Sync 时，会把它的 Managed content **前置拼接**
+# 在本站 robots.txt 之前（只有 origin 返回 200 才会合并），所以这里只写站点自身规则。
+_STATIC_CACHE = {"Cache-Control": "public, max-age=600"}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    return Response(feeds.render_robots(),
+                    media_type="text/plain; charset=utf-8",
+                    headers=_STATIC_CACHE)
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml():
+    body = feeds.render_sitemap(db.get_setting("last_update"))
+    return Response(body,
+                    media_type="application/xml; charset=utf-8",
+                    headers=_STATIC_CACHE)
+
+
+@app.get("/feed.xml", include_in_schema=False)
+def feed_xml():
+    items = db.get_items(limit=feeds.FEED_LIMIT)
+    body = feeds.render_rss(items, db.get_setting("last_update"))
+    return Response(body,
+                    media_type="application/rss+xml; charset=utf-8",
+                    headers=_STATIC_CACHE)
 
 
 # 板块分组：父板块 → 子板块（父板块查询时聚合子板块内容）

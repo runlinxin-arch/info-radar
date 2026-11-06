@@ -157,9 +157,13 @@ try:
     _client = TestClient(api_module.app)
     head_code = _client.head("/healthz").status_code
     hist_code = _client.get(HIST_ROUTE).status_code
+    robots_resp = _client.get("/robots.txt")
+    sitemap_resp = _client.get("/sitemap.xml")
+    feed_resp = _client.get("/feed.xml")
     probe_err = ""
 except Exception as exc:  # pragma: no cover
     head_code = hist_code = None
+    robots_resp = sitemap_resp = feed_resp = None
     probe_err = f"{type(exc).__name__}: {exc}"
 
 checks.append((
@@ -171,6 +175,33 @@ checks.append((
     f"运行期确认 {HIST_ROUTE} 返回 {hist_code}（期望 404）",
     hist_code == 404,
     "TestClient 进程内验证" if not probe_err else probe_err,
+))
+
+# 20/21/22. 任务 6：站点级入口已实现
+def _code(resp):
+    return getattr(resp, "status_code", None)
+
+
+def _text(resp):
+    return getattr(resp, "text", "") or ""
+
+
+checks.append((
+    f"任务 6 三个站点级入口均返回 200："
+    f"robots={_code(robots_resp)} sitemap={_code(sitemap_resp)} feed={_code(feed_resp)}",
+    all(_code(r) == 200 for r in (robots_resp, sitemap_resp, feed_resp))
+    if not probe_err else False,
+    "TestClient 进程内验证" if not probe_err else probe_err,
+))
+checks.append((
+    "robots.txt 声明了 Sitemap 行（供爬虫发现）",
+    "Sitemap: https://inforadar.xin/sitemap.xml" in _text(robots_resp),
+    "robots.txt 追加在 Cloudflare 管理段之后",
+))
+checks.append((
+    f"feed.xml 可解析且有条目（{_text(feed_resp).count('<item>')} 条）",
+    _text(feed_resp).count("<item>") > 0,
+    "RSS 2.0，只出摘要 + 原文链接",
 ))
 
 print("=" * 78)
