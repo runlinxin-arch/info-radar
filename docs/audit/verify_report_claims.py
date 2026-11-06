@@ -204,6 +204,23 @@ checks.append((
     "RSS 2.0，只出摘要 + 原文链接",
 ))
 
+# 23. IndexNow 所有权校验文件（Bing / Yandex 免登录提交）
+try:
+    _indexnow = _client.get(f"/{api_module.INDEXNOW_KEY}.txt")
+    indexnow_ok = (_indexnow.status_code == 200
+                   and _indexnow.text.strip() == api_module.INDEXNOW_KEY)
+    indexnow_detail = (f"HTTP {_indexnow.status_code}，"
+                       f"内容{'匹配' if indexnow_ok else '不匹配'}")
+except Exception as exc:  # pragma: no cover
+    indexnow_ok = False
+    indexnow_detail = f"{type(exc).__name__}: {exc}"
+
+checks.append((
+    "IndexNow 校验文件可访问且内容匹配（Bing/Yandex 提交用）",
+    indexnow_ok,
+    indexnow_detail,
+))
+
 print("=" * 78)
 print("评审报告断言自查")
 print("=" * 78)

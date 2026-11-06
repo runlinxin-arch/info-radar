@@ -178,6 +178,20 @@ def feed_xml():
                     headers=_STATIC_CACHE)
 
 
+# IndexNow 所有权校验文件。
+# IndexNow 是 Bing / Yandex / Seznam 等共用的「免登录提交」协议：
+# 站点在根路径放一个 <key>.txt，内容就是这个 key，即可直接推送 URL。
+# 注意：key 本身是**公开信息**（就是用来证明你控制该站点的），不是密钥。
+INDEXNOW_KEY = "6c1251d53cc84103413cf3db781d93f0"
+
+
+@app.get(f"/{INDEXNOW_KEY}.txt", include_in_schema=False)
+def indexnow_key_file():
+    return Response(INDEXNOW_KEY,
+                    media_type="text/plain; charset=utf-8",
+                    headers=_STATIC_CACHE)
+
+
 # 板块分组：父板块 → 子板块（父板块查询时聚合子板块内容）
 SECTION_GROUPS = {
     "新闻": ["世界新闻", "国内新闻"],
