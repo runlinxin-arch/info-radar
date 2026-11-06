@@ -1,0 +1,24 @@
+# 统一行尾与文件类型，避免跨平台反复出现 "LF will be replaced by CRLF" 噪音
+#
+# 规则：
+#   - 仓库内文本文件一律以 LF 存储与检出（Linux 服务器 / macOS / WSL 一致）
+#   - .bat / .cmd 例外：Windows 批处理需要 CRLF，否则某些 cmd 解析会出错
+
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.db binary
+*.db-wal binary
+*.db-shm binary
+*.gz binary
+*.zip binary
+*.pdf binary

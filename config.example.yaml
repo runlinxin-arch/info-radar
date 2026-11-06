@@ -1,0 +1,124 @@
+# InfoRadar 配置模板
+#
+# 用法：复制本文件为 config.yaml，然后填入你自己的 Tavily API key。
+#   cp config.example.yaml config.yaml
+#
+# 说明：config.yaml 已在 .gitignore 中，真实密钥不会入库。
+#      本模板不含任何真实密钥。
+
+tavily:
+  # 必填。申请地址：https://tavily.com/
+  # 留空时站内搜索接口会返回「未配置 Tavily API key」，其余功能不受影响。
+  api_key: ""
+  max_results: 10
+
+# 大模型点词解释（可选）：全部留空则走免费词典聚合路径。
+# 填上 api_key 后 /api/word 会优先调用 OpenAI 兼容接口
+#（{base_url}/chat/completions，base_url 留空时默认 https://api.openai.com/v1），
+# 失败时自动回落到词典路径。
+llm:
+  provider: ""
+  api_key: ""
+  model: ""
+  base_url: ""
+
+# 每个板块每次更新保留的最新条数
+per_section_keep: 30
+
+# 是否抓取原文正文（trafilatura）；关闭则仅用 RSS 摘要，速度更快
+# ⚠️ 版权红线：公开站请保持 false，只展示摘要 + 原文链接
+fetch_full_content: false
+
+# 更新方式：启动服务时若距上次成功更新超 min_interval_hours 则立即更新；
+# 运行期间每 30 分钟检查一次，超过 periodic_hours 未更新就自动刷新。
+# 仍可用 python update.py 手动更新。
+schedule:
+  mode: "on_startup_and_periodic"
+  min_interval_hours: 2
+  periodic_hours: 4
+  next_hint: "每 4 小时自动更新（服务常驻运行期间）"
+
+# 信息源列表（enabled: false 的源保留配置但不抓取）
+sources:
+  # ---------- AI 资讯 ----------
+  # 注意：量子位（qbitai.com）开启 WAF 反爬，非浏览器客户端会在 TLS 阶段被拦。
+  - name: "极客公园"
+    section: "AI 资讯"
+    type: rss
+    url: "https://www.geekpark.net/rss"
+    enabled: true
+  - name: "TechCrunch AI"
+    section: "AI 资讯"
+    type: rss
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+    enabled: true
+  - name: "雷锋网"
+    section: "AI 资讯"
+    type: rss
+    url: "https://www.leiphone.com/feed"
+    enabled: true
+
+  # ---------- 世界新闻 ----------
+  - name: "中新网国际"
+    section: "世界新闻"
+    type: rss
+    url: "https://www.chinanews.com.cn/rss/world.xml"
+    enabled: true
+  - name: "NPR News"
+    section: "世界新闻"
+    type: rss
+    url: "https://feeds.npr.org/1001/rss.xml"
+    enabled: true
+  - name: "Sky News World"
+    section: "世界新闻"
+    type: rss
+    url: "https://feeds.skynews.com/feeds/rss/world.xml"
+    enabled: true
+
+  # ---------- 国内新闻 ----------
+  - name: "中新网时政"
+    section: "国内新闻"
+    type: rss
+    url: "https://www.chinanews.com.cn/rss/china.xml"
+    enabled: true
+  - name: "中新网滚动"
+    section: "国内新闻"
+    type: rss
+    url: "https://www.chinanews.com.cn/rss/scroll-news.xml"
+    enabled: true
+
+  # ---------- 学术 · AI/CS ----------
+  - name: "arXiv cs.AI"
+    section: "学术 · AI/CS"
+    type: rss
+    url: "https://rss.arxiv.org/rss/cs.AI"
+    enabled: true
+  - name: "arXiv cs.CL"
+    section: "学术 · AI/CS"
+    type: rss
+    url: "https://rss.arxiv.org/rss/cs.CL"
+    enabled: true
+  - name: "arXiv cs.CV"
+    section: "学术 · AI/CS"
+    type: rss
+    url: "https://rss.arxiv.org/rss/cs.CV"
+    enabled: true
+
+  # ---------- 学术 · 交互设计 ----------
+  - name: "arXiv cs.HC"
+    section: "学术 · 交互设计"
+    type: rss
+    url: "https://rss.arxiv.org/rss/cs.HC"
+    enabled: true
+
+  # ---------- 学术 · 心理学 ----------
+  - name: "ScienceDaily Psychology"
+    section: "学术 · 心理学"
+    type: rss
+    url: "https://www.sciencedaily.com/rss/mind_brain/psychology.xml"
+    enabled: true
+  - name: "PsyPost"
+    section: "学术 · 心理学"
+    type: rss
+    url: "https://www.psypost.org/feed"
+    enabled: true
