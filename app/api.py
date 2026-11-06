@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
@@ -179,6 +180,63 @@ def api_status():
         "item_counts": counts,
         "recent_logs": logs,
     }
+
+
+# ---------- 外部监控探针（UptimeRobot 等） ----------
+# config.yaml 的刷新策略是「>4 小时就更新」，检查间隔 30 分钟，
+# 因此健康状态下两次成功更新的最大间隔约 4~4.5 小时。留一倍余量取 8 小时。
+HEALTH_MAX_STALE_HOURS = 8
+
+
+def compute_health(last_update, now=None, max_stale_hours=HEALTH_MAX_STALE_HOURS):
+    """把 last_update 时间串换算成健康结论。
+
+    抽成纯函数是为了能脱离数据库单测（见 docs/audit/test_healthz.py）。
+    """
+    now = now or datetime.now()
+    base = {"last_update": last_update, "max_stale_hours": max_stale_hours,
+            "hours_since": None}
+
+    if not last_update:
+        return {**base, "ok": False, "reason": "no_update_record"}
+
+    try:
+        dt = datetime.strptime(str(last_update), "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return {**base, "ok": False, "reason": "unparsable_timestamp"}
+
+    hours = (now - dt).total_seconds() / 3600
+    base["hours_since"] = round(hours, 1)
+
+    # 时间在未来：通常是时钟回拨，按健康处理，避免误报把监控变成噪音源
+    if hours < 0:
+        return {**base, "ok": True, "reason": "clock_skew"}
+
+    stale = hours > max_stale_hours
+    return {**base, "ok": not stale, "reason": "stale" if stale else "fresh"}
+
+
+@app.get("/healthz")
+def healthz():
+    """外部监控专用：同时检查「进程活着」和「内容新鲜」。
+
+    200 -> 应用在跑，且最近一次成功更新在阈值内
+    503 -> 应用在跑但内容已陈旧（抓取循环失效 / 信息源全部被挡）
+
+    站点整体不可达时监控端拿不到任何响应，同样会告警——所以一个 monitor
+    就同时覆盖了「挂了」和「静默停更」两种故障。
+    """
+    try:
+        last = db.get_setting("last_update")
+    except Exception:
+        log.exception("healthz 读取数据库失败")
+        return JSONResponse(
+            {"ok": False, "reason": "db_error", "last_update": None,
+             "hours_since": None, "max_stale_hours": HEALTH_MAX_STALE_HOURS},
+            status_code=503)
+
+    health = compute_health(last)
+    return JSONResponse(health, status_code=200 if health["ok"] else 503)
 
 
 @app.get("/api/search")
