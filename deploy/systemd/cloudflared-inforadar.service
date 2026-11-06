@@ -1,0 +1,30 @@
+[Unit]
+Description=Cloudflare Tunnel (inforadar.xin -> 127.0.0.1:7100)
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=cloudflared
+Group=cloudflared
+# 凭据目录：/opt/inforadar/.cloudflared（证书 0600，属主 cloudflared）
+ExecStart=/usr/local/bin/cloudflared --config /opt/inforadar/.cloudflared/config.yml --no-autoupdate tunnel run
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# cloudflared 需要向 CF 边缘发起出站连接，无需任何入站端口
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/inforadar/.cloudflared
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflared
+
+[Install]
+WantedBy=multi-user.target

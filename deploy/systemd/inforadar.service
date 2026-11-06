@@ -1,0 +1,42 @@
+[Unit]
+Description=InfoRadar 资讯雷达（FastAPI + 周期抓取）
+Documentation=file:///opt/inforadar/docs/deployment-progress.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=inforadar
+Group=inforadar
+WorkingDirectory=/opt/inforadar
+
+# python 进程本身不需要写仓库代码，只需要写 data/ 和日志
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TZ=Asia/Shanghai
+
+ExecStart=/opt/inforadar/.venv/bin/python /opt/inforadar/run.py
+
+Restart=always
+RestartSec=5
+# 反复崩溃时不要无限快速重启
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# 优雅停止：先 SIGTERM，10 秒后强杀
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# 资源与安全约束
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/inforadar
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=inforadar
+
+[Install]
+WantedBy=multi-user.target

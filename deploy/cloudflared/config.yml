@@ -1,0 +1,35 @@
+# Cloudflare Tunnel 配置（本地管理型隧道，复用现有 inforadar 隧道）
+#
+# 注意：
+#  1. tunnel 与 credentials-file 必须与实际部署路径一致。
+#     install.sh 会自动把下面 <INSTALL_DIR> 替换成真实安装目录（默认 /opt/inforadar）。
+#  2. 不要把 credentials-file 指向家目录以外的临时位置；cloudflared 服务以
+#     cloudflared 用户运行，必须有读权限。
+#  3. 本文件与 6dcf1767-....json 属于敏感凭据，权限保持 0600 / 所属 cloudflared。
+
+tunnel: 6dcf1767-00f2-48fc-90d0-a329db4f9f14
+credentials-file: <INSTALL_DIR>/.cloudflared/6dcf1767-00f2-48fc-90d0-a329db4f9f14.json
+
+# loglevel: info
+# metrics: 127.0.0.1:20241
+
+# 【必须保留】强制走 HTTP/2 over TCP，禁用 QUIC。
+# 2026-09-27 线上事故复盘：cloudflared 默认用 QUIC(UDP 7844) 连 CF 边缘，
+# 在 UDP 被干扰的网络下会 "failed to dial to edge with quic: timeout"，
+# 隧道没有任何活跃连接 -> 公网整站 502。此时 cloudflared 自己的 precheck 会给出
+#   UDP Connectivity  pass / TCP Connectivity  pass / suggested_protocol: http2
+# 改走 TCP 后立即恢复。云服务器机房线路同样可能对 UDP 不友好，
+# 且排障成本极高（现象是整站 502，根因在隧道），所以默认就锁死 http2。
+protocol: http2
+
+loglevel: info
+metrics: 127.0.0.1:20241
+
+ingress:
+  - hostname: inforadar.xin
+    service: http://127.0.0.1:7100
+    originRequest:
+      # 源站是本地回环，无需再走 CF 的 TLS；连接超时放宽一点，避免抓取负载下误判
+      connectTimeout: 30s
+      noTLSVerify: false
+  - service: http_status:404

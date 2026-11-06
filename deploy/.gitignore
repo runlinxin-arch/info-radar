@@ -1,0 +1,7 @@
+# git 忽略：本地部署私钥绝不能进仓库
+id_ed25519
+id_ed25519.pub
+id_ed25519_pub.txt
+_package/
+_verify_tmp/
+*.tar.gz

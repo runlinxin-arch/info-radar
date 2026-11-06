@@ -1,0 +1,16 @@
+# InfoRadar 运行依赖
+#
+# 版本号对齐 2026-09 在 Windows 开发机上验证通过的组合。
+# 用范围而不是硬钉死，避免以后 Python 小版本升级时装不上；
+# 如果服务器上装出来的组合有问题，再回来收紧。
+#
+# 说明：
+#  - trafilatura 会拉入 lxml，抓取全文用；当前 config.yaml 里
+#    fetch_full_content: false，理论上用不到，但代码 import 了它，必须装。
+#  - uvicorn 用标准版即可，run.py 直接调 uvicorn.run()，不需要 gunicorn。
+fastapi>=0.110,<1.0
+uvicorn>=0.27,<1.0
+feedparser>=6.0,<7.0
+requests>=2.31,<3.0
+trafilatura>=1.8,<3.0
+PyYAML>=6.0,<7.0
