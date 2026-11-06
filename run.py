@@ -7,6 +7,8 @@
   ≥ PERIODIC_STALE_HOURS 小时就自动刷新，保证内容持续更新。
 """
 import logging
+import logging.handlers
+import os
 import threading
 import time
 from datetime import datetime
@@ -16,10 +18,22 @@ import uvicorn
 from app import db, load_config, pipeline  # noqa: F401  db 确保建表
 from app.api import app
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, "docs", "audit")
+LOG_PATH = os.path.join(LOG_DIR, "app.log")
+
+# 日志同时写文件与 stderr。
+# 写文件是必须的：用 Windows 计划任务托管后进程没有控制台，
+# stdout/stderr 会被丢弃；且 uvicorn 通过 log_config=None 复用这套 handler，
+# 连访问日志也会带上时间戳（以前 access log 没有时间列，排障很难）。
+os.makedirs(LOG_DIR, exist_ok=True)
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_handlers = [
+    logging.handlers.RotatingFileHandler(
+        LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"),
+    logging.StreamHandler(),
+]
+logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, handlers=_handlers)
 log = logging.getLogger("auto-update")
 
 STARTUP_STALE_HOURS = 2
@@ -76,4 +90,7 @@ def _update_loop():
 if __name__ == "__main__":
     db.init_db()
     threading.Thread(target=_update_loop, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=7100, log_level="info")
+    # log_config=None：不让 uvicorn 覆盖上面的 logging 配置，
+    # 这样它的 error / access 日志也走同一套 handler（带时间戳、写进文件）
+    uvicorn.run(app, host="127.0.0.1", port=7100, log_level="info",
+                log_config=None)
