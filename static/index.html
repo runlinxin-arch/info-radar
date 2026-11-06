@@ -358,6 +358,14 @@ function esc(s) {
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* 外链协议白名单。服务端落库前已用 crawler.safe_link 过滤过，
+   这里是纵深防御：万一历史数据或将来新增的入口漏网，也不会把
+   javascript:/data: 之类的东西塞进 href。非法时返回空串。 */
+function safeUrl(u) {
+  const s = (u || '').toString().trim();
+  return /^https?:\/\//i.test(s) ? s : '';
+}
+
 async function loadSections() {
   const r = await fetch('/api/sections');
   const d = await r.json();
@@ -510,11 +518,16 @@ function renderItems(items) {
   c.innerHTML = items.map((it, i) => {
     const en = isEnglish((it.title || '') + ' ' + (it.summary || ''));
     const canRead = en && it.id;
+    const href = safeUrl(it.link);          // 非法链接 → 空串
     const title = canRead
       ? `<a href="javascript:void(0)" onclick="openReader(${it.id})">${esc(it.title)}</a>`
-      : `<a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(it.title)}</a>`;
+      : (href
+          ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(it.title)}</a>`
+          : esc(it.title));               // 无合法外链时标题退化为纯文本
     const readBtn = canRead
       ? `<a onclick="openReader(${it.id})">📖 精读</a>` : '';
+    const sourceLink = href
+      ? `<a href="${esc(href)}" target="_blank" rel="noopener">阅读原文 →</a>` : '';
     return `
     <div class="card" style="animation-delay:${Math.min(i, 8) * 28}ms">
       <h2>${title}</h2>
@@ -523,7 +536,7 @@ function renderItems(items) {
         <span class="badge">${esc(it.source || '')}</span>
         <span>${esc(it.published_at || it.fetched_at || '')}</span>
         ${readBtn}
-        <a href="${esc(it.link)}" target="_blank" rel="noopener">阅读原文 →</a>
+        ${sourceLink}
       </div>
     </div>`;
   }).join('');
@@ -653,13 +666,14 @@ async function openReader(id) {
     }
     const it = d.item;
     const text = it.content || it.summary || '';
+    const href = safeUrl(it.link);        // 非法链接 → 空串，不渲染原文入口
     await ensureIdioms();
     $('readerBody').innerHTML = `
       <h1>${esc(it.title)}</h1>
       <div class="reader-meta">
         <span class="badge">${esc(it.source || '')}</span>
         <span>${esc(it.published_at || it.fetched_at || '')}</span>
-        <a href="${esc(it.link)}" target="_blank" rel="noopener">阅读原文 →</a>
+        ${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">阅读原文 →</a>` : ''}
       </div>
       <div class="reader-text" id="readerText">${renderArticle(text)}</div>`;
     $('readerText').addEventListener('click', onReaderClick);

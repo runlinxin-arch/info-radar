@@ -10,7 +10,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import db, load_config, pipeline, processor, tavily_search as tv
+from . import crawler, db, load_config, pipeline, processor, tavily_search as tv
 from . import worddict
 
 log = logging.getLogger("api")
@@ -23,15 +23,37 @@ RATE_RULES = [
     ("/api/update", 1800, 1),     # 手动更新：单 IP 30 分钟 1 次
     ("/api/word", 60, 30),        # 点词解释：单 IP 30 次/分钟
 ]
-SEARCH_DAILY_GLOBAL = 300  # 全站每日搜索总上限（保护 Tavily 配额）
+# 全站每日搜索总上限（保护 Tavily 配额）。
+# Tavily 账号是 Researcher 计划：1000 次/月 ÷ 30 天 ≈ 33 次/天，取 30 留余量。
+# 原先写 300（× 30 天 = 9000）会让一个月额度在 3.3 天内打光。
+SEARCH_DAILY_GLOBAL = 30
+
+# 所有限流窗口里最长的那个（秒），用于判断某个 IP 的记录是否还可能有影响
+MAX_WINDOW = max(window for _, window, _ in RATE_RULES)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
+    # 清理 _hits 的最小间隔（秒）。只影响内存回收，不参与限流判定。
+    SWEEP_INTERVAL = 60
+
     def __init__(self, app):
         super().__init__(app)
         self._hits = defaultdict(deque)
         self._lock = threading.Lock()
         self._search_day = {"date": "", "count": 0}
+        self._last_sweep = 0.0
+
+    def _sweep(self, now):
+        """回收 _hits 里已经不可能再影响判定的 key。
+
+        defaultdict 不会自行删除 key：某个 IP 不再来访时，它的 deque 会一直留着。
+        只有「最后一条记录也已经滑出最长窗口」的 key 才可以安全删除——
+        这样无论限流规则怎么调，都不会因为清理而放过本该拦住的请求。
+        """
+        stale = [key for key, dq in list(self._hits.items())
+                 if not dq or now - dq[-1] > MAX_WINDOW]
+        for key in stale:
+            del self._hits[key]
 
     async def dispatch(self, request, call_next):
         path = request.url.path
@@ -41,6 +63,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.time()
         limited = False
         with self._lock:
+            if now - self._last_sweep >= self.SWEEP_INTERVAL:
+                self._sweep(now)
+                self._last_sweep = now
             for prefix, window, limit in RATE_RULES:
                 if not path.startswith(prefix):
                     continue
@@ -52,8 +77,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     limited = True
                     break
                 dq.append(now)
-                if not dq:
-                    self._hits.pop(key, None)
             if not limited and path.startswith("/api/search"):
                 today = time.strftime("%Y-%m-%d")
                 if self._search_day["date"] != today:
@@ -216,7 +239,7 @@ def compute_health(last_update, now=None, max_stale_hours=HEALTH_MAX_STALE_HOURS
     return {**base, "ok": not stale, "reason": "stale" if stale else "fresh"}
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def healthz():
     """外部监控专用：同时检查「进程活着」和「内容新鲜」。
 
@@ -253,38 +276,34 @@ def api_search(q: str = Query(..., min_length=1)):
                             status_code=502)
     saved = []
     for r in results:
+        # 第三方搜索结果的 url 同样不可信，落库前统一过协议白名单
+        link = crawler.safe_link(r.get("url"))
+        if not link:
+            log.warning("搜索结果链接协议不被允许，已跳过: %r", r.get("url"))
+            continue
         pub = r["published_at"]
         if pub:
             pub = pub.replace("T", " ").replace("Z", "").strip()[:19]
         summary = processor.make_summary("", r["content"]) or r["content"][:300]
         db.insert_item(
-            title=r["title"] or r["url"],
+            title=r["title"] or link,
             summary=summary,
             content=r["content"],
-            link=r["url"],
+            link=link,
             source="Tavily 搜索",
             section="搜索结果",
             published_at=pub or None,
             is_search_result=1,
         )
         saved.append({
-            "title": r["title"] or r["url"],
+            "title": r["title"] or link,
             "summary": summary,
-            "link": r["url"],
+            "link": link,
             "source": "Tavily 搜索",
             "published_at": pub or None,
         })
     db.log_search(q, len(saved))
     return {"ok": True, "count": len(saved), "results": saved}
-
-
-@app.get("/api/search/history")
-def api_search_history():
-    with db._lock, db._connect() as conn:
-        rows = conn.execute(
-            "SELECT keyword, searched_at, result_count FROM searches "
-            "ORDER BY id DESC LIMIT 20").fetchall()
-    return {"history": [dict(r) for r in rows]}
 
 
 @app.get("/api/item/{item_id}")

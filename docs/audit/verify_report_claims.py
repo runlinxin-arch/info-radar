@@ -96,16 +96,18 @@ checks.append((
 m = re.search(r"SEARCH_DAILY_GLOBAL = (\d+)", api)
 daily = int(m.group(1)) if m else None
 checks.append((
-    f"SEARCH_DAILY_GLOBAL={daily} 超出 Tavily 月额度 1000（日限应 ≤33）",
-    daily is not None and daily * 30 > 1000,
-    f"{daily} × 30 = {daily * 30 if daily else '?'} 次/月 vs 额度 1000",
+    f"Tavily 日限已下调：SEARCH_DAILY_GLOBAL={daily}（应 ≤33）",
+    daily is not None and daily * 30 <= 1000,
+    f"{daily} × 30 = {daily * 30 if daily else '?'} 次/月，额度 1000",
 ))
 
-# 11. 限流字典死代码
+# 11. 限流字典死代码（已修复：删除死代码 + 新增 _sweep 定期回收）
 checks.append((
-    "限流 self._hits 存在死代码分支，key 永不回收",
-    bool(re.search(r"dq\.append\(now\)\s*\n\s*if not dq:", api)),
-    "api.py:53-55",
+    "限流死代码已删除，且存在 _sweep 定期回收",
+    not re.search(r"dq\.append\(now\)\s*\n\s*if not dq:", api)
+    and bool(re.search(r"def _sweep\(self,\s*now\)", api))
+    and "_hits.pop" not in api,
+    "_sweep() 已定义；append 后无死代码；无旧 pop 写法",
 ))
 
 # 12. 配置每请求重载
@@ -131,11 +133,44 @@ checks.append((
     "6 板块 × 30 = 180",
 ))
 
-# 15. 抓取与 Web 同进程
+# 16. 抓取与 Web 同进程
 checks.append((
     "抓取线程运行在 Web 进程内",
     "threading.Thread(target=_update_loop" in read("run.py"),
     "run.py:78",
+))
+
+# 17. 隐私路由已移除（任务 C）
+HIST_ROUTE = "/api/search/history"
+checks.append((
+    f"隐私路由 {HIST_ROUTE} 已从源码移除",
+    HIST_ROUTE not in api,
+    "api.py 中已无该路由定义",
+))
+
+# 18/19. 进程内运行期验证（TestClient，不走公网、不写数据库）
+sys.path.insert(0, BASE)
+try:
+    from fastapi.testclient import TestClient
+    import app.api as api_module
+
+    _client = TestClient(api_module.app)
+    head_code = _client.head("/healthz").status_code
+    hist_code = _client.get(HIST_ROUTE).status_code
+    probe_err = ""
+except Exception as exc:  # pragma: no cover
+    head_code = hist_code = None
+    probe_err = f"{type(exc).__name__}: {exc}"
+
+checks.append((
+    f"/healthz 支持 HEAD：实际 {head_code}（修复前为 405）",
+    head_code in (200, 503),
+    "app.api_route(methods=['GET','HEAD'])" if not probe_err else probe_err,
+))
+checks.append((
+    f"运行期确认 {HIST_ROUTE} 返回 {hist_code}（期望 404）",
+    hist_code == 404,
+    "TestClient 进程内验证" if not probe_err else probe_err,
 ))
 
 print("=" * 78)

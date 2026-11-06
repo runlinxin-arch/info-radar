@@ -1,15 +1,25 @@
 # -*- coding: utf-8 -*-
-"""安全校验实验：恶意/异常 feed 链接会如何流到前端 href。
+"""外链协议防护：修复前 vs 修复后的对照实验。
+
+任务 C 之前，这个脚本复刻旧逻辑并证明 9/9 恶意用例被放行；
+任务 C 之后，它改为**同时**跑「旧逻辑复刻」与「当前真实实现」，
+用来证明修复真的生效，并且不影响合法链接。
 
 用法： python docs/audit/verify_url_risk.py
-不联网，纯本地复现渲染链路。
+退出码 0 = 当前实现已拦住全部可执行伪协议
 """
+import os
 import re
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-# ---------- 复刻 static/index.html 里的 esc() ----------
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, BASE)
+
+from app.crawler import safe_link  # 当前真实实现（任务 C 新增）
+
+# ---------- 修复前的逻辑（保留为对照基线）----------
 _ESC = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}
 
 
@@ -17,82 +27,94 @@ def esc(s):
     return re.sub(r"[&<>\"']", lambda m: _ESC[m.group(0)], s or "")
 
 
-def normalized_scheme(url):
-    """浏览器解析 href 时的等效 scheme（去首尾空白 + 转小写）。"""
-    return url.strip().lower()
+def old_accepts(link):
+    """任务 C 之前的 crawler：只判非空，不改写、不校验协议。"""
+    return link.strip() if (link or "").strip() else None
 
 
-CONFIRMED = ("javascript:", "vbscript:", "data:")
+def old_render(link):
+    """任务 C 之前的卡片模板：esc 只转义引号，不过滤协议。"""
+    return f'<a href="{esc(link)}" target="_blank" rel="noopener">标题</a>'
 
 
-# ---------- 复刻 static/index.html 里的卡片模板 ----------
-def render_card(it):
-    return (f'<a href="{esc(it["link"])}" target="_blank" rel="noopener">'
-            f'{esc(it["title"])}</a>')
+EXECUTABLE = ("javascript:", "vbscript:", "data:")
 
 
-# ---------- 复刻 crawler.fetch_feed 对 link 的处置 ----------
-def crawler_accepts(link):
-    """crawler.py 第 28-44 行：只判非空，不改写、不校验协议。"""
-    title = "恶意条目"
-    if not title or not link:
-        return None
-    return {"title": title, "link": link.strip()}
+def effective_scheme(url):
+    """浏览器解析 href 时的等效 scheme（忽略首尾空白、大小写）。"""
+    return (url or "").strip().lower()
 
 
 CASES = [
     ("正常 https", "https://www.geekpark.net/news/12345"),
     ("正常 http", "http://example.com/a"),
     ("javascript 伪协议", "javascript:fetch('/api/update',{method:'POST'})"),
-    ("javascript + 大小写混淆", "JaVaScRiPt:alert(1)"),
+    ("javascript 大小写混淆", "JaVaScRiPt:alert(1)"),
     ("data: URI", "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="),
     ("vbscript:", "vbscript:msgbox(1)"),
     ("属性逃逸尝试（引号）", 'https://x.com/" onmouseover="alert(1)'),
     ("前导空白绕过", "  javascript:alert(1)"),
-    ("tab/换行绕过", "java\tscript:alert(1)"),
+    ("tab 分隔绕过", "java\tscript:alert(1)"),
+    ("相对路径（部分 feed 会出现）", "/article/1"),
 ]
 
-print("=" * 78)
-print("1. crawler 是否拦下异常 link")
-print("=" * 78)
-accepted = []
+print("=" * 86)
+print("外链协议防护对照实验")
+print("=" * 86)
+print(f"  {'用例':<26}{'旧逻辑':<10}{'当前实现':<12}结论")
+print("-" * 86)
+
+old_bad, new_bad, changed = [], [], []
 for name, link in CASES:
-    item = crawler_accepts(link)
-    ok = item is not None
-    if ok:
-        accepted.append((name, link))
-    print(f"  {name:24} crawler 接受: {'是' if ok else '否'}")
+    o = old_accepts(link)
+    n = safe_link(link)
+    dangerous = effective_scheme(link).startswith(EXECUTABLE)
+
+    if o and dangerous:
+        old_bad.append(name)
+    if n and dangerous:
+        new_bad.append(name)
+    if bool(o) != bool(n):
+        changed.append(name)
+
+    if dangerous:
+        note = "危险已被拦住" if not n else "仍然危险！"
+    elif not n:
+        note = ("非 http(s) 变体，被拒" if not effective_scheme(link).startswith(
+            ("http://", "https://")) else "合法但被拒（需人工判断）")
+    else:
+        note = "正常"
+    print(f"  {name:<26}{'放行' if o else '拒绝':<10}{'放行' if n else '拒绝':<12}{note}")
+
+# 旧实现渲染后 href 里是什么
+print()
+print("旧实现渲染结果（证明当时确实可执行）：")
+shown = 0
+for name, link in CASES:
+    if old_accepts(link) and effective_scheme(link).startswith(EXECUTABLE):
+        href = re.search(r'href="([^"]*)"', old_render(link)).group(1)
+        print(f"  {name:<26} href={href[:56]!r}")
+        shown += 1
+if not shown:
+    print("  （无）")
+
+# 前端纵深防御
+html = open(os.path.join(BASE, "static", "index.html"), encoding="utf-8").read()
+validated = len(re.findall(r'href="\$\{esc\(href\)\}"', html))
+print()
+print("前端纵深防御：")
+print(f"  定义了 safeUrl()                 : {'是' if re.search(r'function\s+safeUrl\s*\(', html) else '否'}")
+print(f"  it.link 仍直接进入 href          : {'是（危险）' if re.search(r'esc\(it\.link\)', html) else '否'}")
+print(f"  取自校验变量的 href 数量          : {validated}")
 
 print()
-print("=" * 78)
-print("2. 接受后渲染成 HTML 的实际结果")
-print("=" * 78)
-for name, link in accepted:
-    html = render_card({"title": "恶意条目", "link": link})
-    m = re.search(r'href="([^"]*)"', html)
-    href = m.group(1) if m else "(解析失败)"
-    danger = ""
-    if normalized_scheme(link).startswith(CONFIRMED):
-        danger = "  <== 危险：可执行伪协议原样进入 href"
-    elif '"' in link or "'" in link or "<" in link or ">" in link:
-        danger = "  （引号已被 esc 转义为实体，属性未被逃逸）"
-    print(f"  {name}")
-    print(f"    href 实际值: {href!r}{danger}")
-
+print("=" * 86)
+print(f"  旧实现放行可执行伪协议 : {len(old_bad)} 条  {old_bad}")
+print(f"  当前实现放行可执行伪协议: {len(new_bad)} 条  {new_bad}")
+if changed:
+    print(f"  判定发生变化的用例      : {changed}")
+print("=" * 86)
 print()
-print("=" * 78)
-print("3. 结论")
-print("=" * 78)
-confirmed = [n for n, l in accepted
-             if normalized_scheme(l).startswith(CONFIRMED)]
-print(f"  crawler 放行的用例: {len(accepted)}/{len(CASES)}（只判非空，无协议白名单）")
-print(f"  确认渲染后仍是可执行伪协议: {confirmed}")
-print(f"  引号逃逸（属性注入）: {'未发生，esc() 生效' if not any('onmouseover=' in esc(l) and '&quot;' not in esc(l) for _, l in accepted) else '发生'}")
-print()
-print("  要点：")
-print("   - esc() 挡住了引号逃逸/属性注入，这点是好的。")
-print("   - 但整条链路没有任何协议白名单：crawler 收、db 存、前端 href 直用。")
-print("   - 浏览器会忽略 href 首尾空白，所以 '  javascript:...' 等效于 'javascript:...'。")
-print("   - 攻击面：任一被聚合的第三方 RSS 源提供 javascript:/data: 链接，")
-print("     访客点击即在本站同源下执行脚本（可读改站点数据、触发 /api/update）。")
-print("   - 修复：落库前只放行 http/https；前端渲染 href 前再校验一次（纵深防御）。")
+print("说明：相对路径以前会渲染成指向本站的坏链接（/article/1 打到 inforadar.xin），")
+print("      现在直接不展示，属于改进而非退化。")
+sys.exit(0 if not new_bad else 1)
