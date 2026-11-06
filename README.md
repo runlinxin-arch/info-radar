@@ -5,7 +5,10 @@
 [![healthz](https://img.shields.io/website?url=https%3A%2F%2Finforadar.xin%2Fhealthz&label=healthz&up_message=fresh&down_message=stale)](https://inforadar.xin/healthz)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/license-个人项目-lightgrey)](#内容与版权声明)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+> 🚧 **此网站项目仍在开发阶段，并非最终完全体 :)**
+> 具体缺口见下方「已知限制 / 路线图」。
 
 把 **AI 资讯、世界与国内新闻、arXiv 学术论文**收敛到一个页面：每 4 小时自动抓取最新内容，
 按板块展示摘要，点击可跳原文。附带英文点词解释、习语高亮、站内搜索与 RSS 订阅。
@@ -231,7 +234,10 @@ python docs/audit/submit_indexnow.py [url]   # 向 Bing/Yandex 推送 URL
 - `fetch_full_content` 恒为 `false`（只抓 RSS 摘要，不抓正文）。
 - 若你是权利人并认为本站展示方式侵犯了你的权益，请通过仓库 Issue 联系，我会在核实后移除相关条目。
 
-**代码**：个人项目，未声明开源许可证（默认保留所有权利）。欢迎阅读与参考，转载/复用请先联系。
+**代码**：[MIT License](LICENSE) © 2026 runlinxin-arch —— 可自由使用、修改、分发、商用，保留版权声明即可。
+
+> MIT **只覆盖代码**。本站聚合的文章标题、摘要、链接等内容**版权仍归各自发布方**，不在 MIT 授权范围内；
+> 本项目对这类内容只做索引与摘要展示。
 
 ---
 
