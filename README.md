@@ -19,7 +19,7 @@
 | 功能 | 说明 |
 |---|---|
 | **6 个板块** | AI 资讯 / 世界新闻 / 国内新闻 / 学术 · AI/CS / 学术 · 交互设计 / 学术 · 心理学 |
-| **14 个信息源** | arXiv ×4、TechCrunch AI、极客公园、雷锋网、中新网 ×3、NPR、Sky News、ScienceDaily、PsyPost |
+| **14 个信息源**（配置中启用） | arXiv ×4、TechCrunch AI、极客公园、雷锋网、中新网 ×3、NPR、Sky News、ScienceDaily、PsyPost |
 | **自动更新** | 启动时距上次成功更新 >2h 立即抓取；常驻期间每 30 分钟检查，>4h 自动刷新 |
 | **摘要而非全文** | 规则式摘要（前 300–500 字 + 关键句），`fetch_full_content: false` |
 | **双语阅读模式** | 英文条目可「精读」，点任意单词查音标/词性/释义/例句；内置 **283 条**习语俚语高亮 |
@@ -79,7 +79,7 @@ info-radar/
 │  └─ verify/                  # 搜索引擎所有权校验文件
 ├─ data/radar.db               # SQLite 数据库（已 .gitignore）
 ├─ deploy/                     # 云服务器部署套件（systemd / 备份 / 打包）
-└─ docs/                       # 文档 + 12 个自检脚本
+└─ docs/                       # 文档 + 自检脚本（清单见下方）
 ```
 
 ---
