@@ -1,0 +1,152 @@
+# -*- coding: utf-8 -*-
+"""评审报告自查：确认报告里的每一条断言都有据可查。
+
+用法： python docs/audit/verify_report_claims.py
+"""
+import os
+import re
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def read(rel):
+    p = os.path.join(BASE, rel)
+    return open(p, "r", encoding="utf-8").read() if os.path.isfile(p) else ""
+
+
+html = read("static/index.html")
+api = read("app/api.py")
+config = read("config.yaml")
+
+checks = []
+
+# 1. 前端是否真的没用到 /api/search/history
+checks.append((
+    "前端未调用 /api/search/history（可安全删除该路由）",
+    "search/history" not in html,
+    f"index.html 中出现次数: {html.count('search/history')}",
+))
+
+# 2. 是否有前端路由能力
+checks.append((
+    "前端无 pushState/replaceState/hash 路由",
+    not re.search(r"pushState|replaceState", html),
+    f"pushState 出现次数: {len(re.findall('pushState', html))}",
+))
+
+# 3. 卡片标题是否有 overflow-wrap / word-break
+card_h2 = ""
+m = re.search(r"\.card h2 \{(.*?)\}", html, re.S)
+if m:
+    card_h2 = m.group(1)
+checks.append((
+    "卡片标题无 overflow-wrap/word-break（长英文会撑破）",
+    not re.search(r"overflow-wrap|word-break|word-wrap", card_h2),
+    f".card h2 规则: {card_h2.strip()[:90]}",
+))
+
+# 4. prefers-reduced-motion 是唯一 @media
+medias = re.findall(r"@media[^{]*", html)
+checks.append((
+    "全站仅 1 个 @media 且是 prefers-reduced-motion",
+    len(medias) == 1 and "prefers-reduced-motion" in medias[0],
+    f"@media 清单: {[x.strip() for x in medias]}",
+))
+
+# 5. 下拉菜单只有 hover 触发
+checks.append((
+    "子板块下拉仅由 :hover 触发（触屏风险）",
+    ".tab-wrap:hover .dropdown" in html and ".tab-wrap:focus-within .dropdown" not in html
+    and not re.search(r"tab-wrap'\)\.onclick|wrap\.onclick", html),
+    "无 focus-within / 无 click 触发",
+))
+
+# 6. readonly 弹层缺少 dialog 语义
+checks.append((
+    "阅读弹层无 role=dialog / aria-modal / 焦点陷阱",
+    not re.search(r'role="dialog"|aria-modal|inert|focusTrap', html),
+    "三项均无",
+))
+
+# 7. 精读入口是无 href 的 <a>
+checks.append((
+    "「精读」入口是无 href 的 <a>（键盘不可达）",
+    bool(re.search(r'<a onclick="openReader', html)),
+    "index.html:517 附近",
+))
+
+# 8. Escape 一键关两层
+checks.append((
+    "Escape 同时关闭单词气泡与阅读器",
+    bool(re.search(r"Escape'\) \{ closeWordPop\(\); closeReader\(\);", html)),
+    "index.html:681",
+))
+
+# 9. 相对时间 / 时间格式化缺失
+checks.append((
+    "无相对时间格式化（直接输出原始时间串）",
+    not re.search(r"分钟前|小时前|toLocaleString|Intl\.RelativeTimeFormat", html),
+    "直接渲染 published_at 字符串",
+))
+
+# 10. Tavily 日限额与月额度矛盾
+m = re.search(r"SEARCH_DAILY_GLOBAL = (\d+)", api)
+daily = int(m.group(1)) if m else None
+checks.append((
+    f"SEARCH_DAILY_GLOBAL={daily} 超出 Tavily 月额度 1000（日限应 ≤33）",
+    daily is not None and daily * 30 > 1000,
+    f"{daily} × 30 = {daily * 30 if daily else '?'} 次/月 vs 额度 1000",
+))
+
+# 11. 限流字典死代码
+checks.append((
+    "限流 self._hits 存在死代码分支，key 永不回收",
+    bool(re.search(r"dq\.append\(now\)\s*\n\s*if not dq:", api)),
+    "api.py:53-55",
+))
+
+# 12. 配置每请求重载
+checks.append((
+    "每请求重新读取并解析 config.yaml",
+    len(re.findall(r"config = load_config\(\)", api)) >= 4,
+    f"load_config() 调用点: {len(re.findall(r'config = load_config', api))} 处",
+))
+
+# 13. 无 schema 迁移
+db = read("app/db.py")
+checks.append((
+    "数据层无迁移机制（只有 CREATE TABLE IF NOT EXISTS）",
+    "user_version" not in db and "ALTER TABLE" not in db,
+    "无 user_version / ALTER TABLE",
+))
+
+# 14. 内容上限
+m = re.search(r"per_section_keep: *(\d+)", config)
+checks.append((
+    f"per_section_keep={m.group(1) if m else '?'} → 全站上限 180 条",
+    bool(m) and int(m.group(1)) == 30,
+    "6 板块 × 30 = 180",
+))
+
+# 15. 抓取与 Web 同进程
+checks.append((
+    "抓取线程运行在 Web 进程内",
+    "threading.Thread(target=_update_loop" in read("run.py"),
+    "run.py:78",
+))
+
+print("=" * 78)
+print("评审报告断言自查")
+print("=" * 78)
+failed = 0
+for i, (desc, ok, evidence) in enumerate(checks, 1):
+    print(f"  [{i:2}] {'通过' if ok else '不成立'}  {desc}")
+    print(f"        证据: {evidence}")
+    if not ok:
+        failed += 1
+print()
+print(f"合计 {len(checks)} 条断言，不成立 {failed} 条。")
+sys.exit(1 if failed else 0)
