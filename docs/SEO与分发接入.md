@@ -33,7 +33,7 @@ Sitemap: https://inforadar.xin/sitemap.xml
 
 不需要清缓存了。**此项已闭环。**
 
-### 2. 提交 sitemap 给 Google —— ⬜ 需要你本人操作（我无法代做）
+### 2. 提交 sitemap 给 Google —— ✅ 已完成（2026-11-06）
 
 必须登录**你自己的 Google 账号**才能创建 Search Console 资源，这一步没有免登录的办法（Google 没有 IndexNow 之类的开放提交协议）。
 
@@ -42,6 +42,16 @@ Sitemap: https://inforadar.xin/sitemap.xml
 3. 验证方式选「**HTML 文件**」—— **已就绪，直接点「验证」即可**
 4. 验证通过后 → 左侧 **索引 → 站点地图** → 提交 `sitemap.xml`
 5. 顺手用「**网址检查**」输入 `https://inforadar.xin/` → 点「请求编入索引」
+
+**提交时踩过的两个坑（都出在输入框，不是服务端）**：
+
+| 填了什么 | GSC 实际去抓的 | 结果 |
+|---|---|---|
+| 留空 / 只填 `/` | `https://inforadar.xin/` | 「**Sitemap 是 HTML**」（抓到首页，第 2 行是 `<html>`） |
+| `inforadar.xin/sitemap.xml` | `https://inforadar.xin/inforadar.xin/sitemap.xml` | 404「**无法读取此站点地图**」 |
+| **`sitemap.xml`** ✅ | `https://inforadar.xin/sitemap.xml` | **成功** |
+
+> 输入框左侧的 `inforadar.xin/` 是 GSC 自带前缀，**只补后面那一段**，不要带协议、不要带域名、不要带前导斜杠。
 
 **验证文件（已部署）**：
 
