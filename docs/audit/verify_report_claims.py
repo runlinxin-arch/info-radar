@@ -221,6 +221,32 @@ checks.append((
     indexnow_detail,
 ))
 
+# 24. 搜索引擎所有权校验文件（static/verify/ 下每个文件都应原样可访问）
+try:
+    _vdir = os.path.join(BASE, "static", "verify")
+    _vnames = sorted(f for f in os.listdir(_vdir)
+                     if f.endswith((".html", ".xml"))) if os.path.isdir(_vdir) else []
+    _vbad = []
+    for _n in _vnames:
+        with open(os.path.join(_vdir, _n), "rb") as _fh:
+            _want = _fh.read()
+        _resp = _client.get(f"/{_n}")
+        if _resp.status_code != 200 or _resp.content != _want:
+            _vbad.append(f"{_n}(HTTP {_resp.status_code})")
+    verify_ok = not _vbad
+    verify_detail = ("目录为空，无校验文件" if not _vnames else
+                     (f"{len(_vnames)} 个文件全部可访问且内容逐字节一致"
+                      if not _vbad else f"异常: {_vbad}"))
+except Exception as exc:  # pragma: no cover
+    verify_ok = False
+    verify_detail = f"{type(exc).__name__}: {exc}"
+
+checks.append((
+    "搜索引擎所有权校验文件可原样访问（static/verify/）",
+    verify_ok,
+    verify_detail,
+))
+
 print("=" * 78)
 print("评审报告断言自查")
 print("=" * 78)

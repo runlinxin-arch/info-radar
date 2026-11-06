@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """FastAPI 路由。"""
 import logging
+import os
+import re
 import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -127,7 +129,6 @@ def _do_update():
 
 @app.get("/")
 def index():
-    import os
     html = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "static", "index.html")
     return FileResponse(html)
@@ -371,3 +372,28 @@ def api_word(w: str = Query(..., min_length=1, max_length=50)):
 def api_idioms():
     """内置习语/俚语/词组清单，供阅读模式高亮匹配。"""
     return {"idioms": worddict.load_idioms()}
+
+
+# ---------- 站点根校验文件（Google Search Console / Bing / Yandex） ----------
+# GSC 的「HTML 文件」验证方式要求 https://<域名>/google<token>.html 原样返回该文件。
+# 把文件放进 static/verify/ 即生效，不需要改代码。
+#
+# ⚠️ 这个路由必须注册在**最末尾**：它匹配任意单段路径，
+#    若放在前面会把 /robots.txt、/feed.xml 之类的字面路由抢掉。
+_VERIFY_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "verify")
+_VERIFY_NAME = re.compile(
+    r"^(?:google[0-9A-Za-z]+\.html|BingSiteAuth\.xml|yandex_[0-9A-Za-z]+\.html)$")
+
+
+@app.get("/{filename}", include_in_schema=False)
+def root_verify_file(filename: str):
+    """只放行搜索引擎校验文件的固定文件名，其余一律 404。"""
+    if not _VERIFY_NAME.match(filename):
+        raise HTTPException(status_code=404, detail="Not Found")
+    path = os.path.join(_VERIFY_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Not Found")
+    media = "application/xml" if filename.endswith(".xml") else "text/html"
+    return FileResponse(path, media_type=media,
+                        headers={"Cache-Control": "public, max-age=600"})
