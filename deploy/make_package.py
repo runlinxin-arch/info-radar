@@ -29,9 +29,13 @@ DB_PATH = os.path.join(BASE_DIR, "data", "radar.db")
 # 要打进包里的文件和目录（相对项目根）
 INCLUDE_DIRS = ["app", "static", "docs", "deploy"]
 INCLUDE_FILES = ["run.py", "update.py", "config.yaml"]
-# deploy/ 里不需要进包的东西（含本地 SSH 公钥残留文件、打包产物）
-DEPLOY_EXCLUDE = {"_package", "__pycache__"}
-DEPLOY_EXCLUDE_FILES = {"id_ed25519.pub", "id_ed25519_pub.txt"}
+# deploy/ 里不需要进包的东西（含本地 SSH 私钥、公钥残留与打包产物）
+DEPLOY_EXCLUDE = {"_package", "__pycache__", "_clone_verify", "_verify_tmp"}
+# `id_ed25519` 是登录服务器的私钥：绝不能进迁移包。
+# 否则包被上传到服务器后，能 SSH 进这台机器的那把钥匙就躺在机器上了。
+DEPLOY_EXCLUDE_FILES = {"id_ed25519", "id_ed25519.pub", "id_ed25519_pub.txt"}
+# 任何日志都不进包：服务器会自己生成，带上本机日志只会泄露排障痕迹
+PACKAGE_EXCLUDE_SUFFIXES = (".log",)
 
 
 def log(msg: str) -> None:
@@ -110,6 +114,8 @@ def collect_files() -> list[tuple[str, str]]:
             ]
             for fn in filenames:
                 if fn.endswith((".pyc", ".pyo")):
+                    continue
+                if fn.endswith(PACKAGE_EXCLUDE_SUFFIXES):
                     continue
                 if d == "deploy" and fn.endswith(".tar.gz"):
                     continue
