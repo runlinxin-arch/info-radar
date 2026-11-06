@@ -39,11 +39,24 @@ Sitemap: https://inforadar.xin/sitemap.xml
 
 1. 打开 <https://search.google.com/search-console>
 2. **添加资源** → 选「**网址前缀**」→ 填 `https://inforadar.xin/`
-3. 验证方式选 **DNS 记录**（在 Cloudflare 加一条 TXT，最省事），或「HTML 标记」
+3. 验证方式选「**HTML 文件**」—— **已就绪，直接点「验证」即可**
 4. 验证通过后 → 左侧 **索引 → 站点地图** → 提交 `sitemap.xml`
 5. 顺手用「**网址检查**」输入 `https://inforadar.xin/` → 点「请求编入索引」
 
-> 已验证前置条件全部就绪（否则你会在第 6 步白等）：
+**验证文件（已部署）**：
+
+| 项 | 值 |
+|---|---|
+| 路径 | `https://inforadar.xin/google6e1f8eda28d0a5ad.html` |
+| 内容 | `google-site-verification: google6e1f8eda28d0a5ad.html`（53 字节，无换行） |
+| 状态 | HTTP **200**，用 Googlebot UA 实测同样 200 |
+| 源文件位置 | `static/verify/`（后续 GSC 换文件时，丢进去即可生效，无需改代码） |
+
+> 若你更想用 DNS 方式：在 Cloudflare 加一条 TXT 即可，两种方式等效。但 HTML 文件已经放好了，少一步。
+>
+> ⚠️ **验证通过后不要删这个文件** —— GSC 会定期复查，文件消失会导致所有权失效。
+
+> 已验证前置条件全部就绪（否则你会在最后白等）：
 > Googlebot UA 取 `/`、`/robots.txt`、`/sitemap.xml` **全部 200**；无 `X-Robots-Tag` 阻断头；无 `noindex`。
 
 ### 3. 提交给 Bing —— ✅ 已通过 IndexNow 完成（无需登录）
