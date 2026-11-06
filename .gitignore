@@ -6,10 +6,13 @@ __pycache__/
 venv/
 
 # 配置与密钥（含 API key，不入库）
-config.yaml
+# 前导 / 锚定到仓库根：只忽略根目录这一份密钥，避免误伤子目录中的同名配置文件
+/config.yaml
 
 # 运行时数据（SQLite 数据库及日志）
-data/
+# 同样必须锚定：不写 / 会匹配任意层级的 data/，把 app/data/ 这个源码资源一起吃掉
+# （app/data/idioms.json 是习语词典，缺失时功能会静默降级，见 docs/audit/verify_repo_completeness.py）
+/data/
 *.db
 *.db-shm
 *.db-wal
