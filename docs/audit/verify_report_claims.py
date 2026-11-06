@@ -125,12 +125,24 @@ checks.append((
     "无 user_version / ALTER TABLE",
 ))
 
-# 14. 内容上限
+# 14. 内容保留额度（M0：从"统一 30"改为"默认 300 + 国内新闻 500"）
 m = re.search(r"per_section_keep: *(\d+)", config)
+m_cn = re.search(r"国内新闻:\s*(\d+)", config)
+keep_default = int(m.group(1)) if m else None
+keep_cn = int(m_cn.group(1)) if m_cn else None
 checks.append((
-    f"per_section_keep={m.group(1) if m else '?'} → 全站上限 180 条",
-    bool(m) and int(m.group(1)) == 30,
-    "6 板块 × 30 = 180",
+    f"保留额度已提升：默认 {keep_default}、国内新闻 {keep_cn}（M0 前统一 30）",
+    keep_default is not None and keep_default >= 300
+    and keep_cn is not None and keep_cn >= 500,
+    "per_section_keep + per_section_keep_override",
+))
+
+# 15. jinja2 依赖显式声明（M0：避免云上 ModuleNotFoundError）
+_req = read("deploy/requirements.txt").lower()
+checks.append((
+    "jinja2 已显式写入 deploy/requirements.txt",
+    "jinja2" in _req,
+    "P0 文章页模板依赖；此前只是被别的包带进来",
 ))
 
 # 16. 抓取与 Web 同进程

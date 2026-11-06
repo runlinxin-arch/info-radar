@@ -8,9 +8,12 @@
 #  - trafilatura 会拉入 lxml，抓取全文用；当前 config.yaml 里
 #    fetch_full_content: false，理论上用不到，但代码 import 了它，必须装。
 #  - uvicorn 用标准版即可，run.py 直接调 uvicorn.run()，不需要 gunicorn。
+#  - jinja2 用于 P0 的文章页模板（app/templates/）。本机以前是"被别的包带进来
+#    装上的"，requirements 里没写，云服务器上会 ModuleNotFoundError —— 显式声明。
 fastapi>=0.110,<1.0
 uvicorn>=0.27,<1.0
 feedparser>=6.0,<7.0
 requests>=2.31,<3.0
 trafilatura>=1.8,<3.0
 PyYAML>=6.0,<7.0
+jinja2>=3.1,<4.0
