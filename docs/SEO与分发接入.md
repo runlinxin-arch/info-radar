@@ -19,32 +19,48 @@
 
 ---
 
-## 二、你需要做的（按顺序）
+## 二、进度与剩余动作
 
-### 1. 清一下 Cloudflare 的 `/robots.txt` 缓存（1 分钟，可选）
+### 1. Cloudflare `/robots.txt` 缓存 —— ✅ 已完成（自动生效，无需操作）
 
-**现象**：源站 `robots.txt` 已经正确，但公网拿到的还是旧的、**不含 `Sitemap:` 行**的版本。
+**当时的现象**：源站 `robots.txt` 已正确，但公网拿到的还是旧的、**不含 `Sitemap:` 行**的版本（Cloudflare 缓存 4 小时，`max-age=14400`）。
 
-**原因**：Cloudflare 自己缓存 `robots.txt` 4 小时（`Cache-Control: max-age=14400`）。我实测时 `Age: 143`。
+**最终结果**：缓存已自然刷新，实测公网 `robots.txt` 已包含：
 
-**处理**（二选一）：
-- **等**：最多 4 小时自动生效，无需任何操作。
-- **立刻**：Cloudflare 控制台 → 选中 `inforadar.xin` → **缓存 / Caching** → **配置 / Configuration** → **清除缓存 / Purge Cache** → **单个 URL** → 填 `https://inforadar.xin/robots.txt` → 清除。
+```
+Sitemap: https://inforadar.xin/sitemap.xml
+```
 
-> 不等也行：提交 sitemap 时可以手填 URL，不依赖 robots.txt 里的声明。但长期最好让爬虫能自动发现。
+不需要清缓存了。**此项已闭环。**
 
-### 2. 提交 sitemap 给 Google（5 分钟）
+### 2. 提交 sitemap 给 Google —— ⬜ 需要你本人操作（我无法代做）
+
+必须登录**你自己的 Google 账号**才能创建 Search Console 资源，这一步没有免登录的办法（Google 没有 IndexNow 之类的开放提交协议）。
 
 1. 打开 <https://search.google.com/search-console>
 2. **添加资源** → 选「**网址前缀**」→ 填 `https://inforadar.xin/`
-3. 验证方式选 **DNS 记录**（Cloudflare 里加一条 TXT，最省事），或「HTML 标记」
+3. 验证方式选 **DNS 记录**（在 Cloudflare 加一条 TXT，最省事），或「HTML 标记」
 4. 验证通过后 → 左侧 **索引 → 站点地图** → 提交 `sitemap.xml`
 5. 顺手用「**网址检查**」输入 `https://inforadar.xin/` → 点「请求编入索引」
 
-### 3. 提交给 Bing（3 分钟）
+> 已验证前置条件全部就绪（否则你会在第 6 步白等）：
+> Googlebot UA 取 `/`、`/robots.txt`、`/sitemap.xml` **全部 200**；无 `X-Robots-Tag` 阻断头；无 `noindex`。
 
-<https://www.bing.com/webmasters> → 支持**直接从 Google Search Console 导入**，一键搞定。
-（Bing 的索引也会喂给 ChatGPT 搜索等下游，值得做。）
+### 3. 提交给 Bing —— ✅ 已通过 IndexNow 完成（无需登录）
+
+**已完成**：走 [IndexNow](https://www.indexnow.org/) 协议提交，返回 **HTTP 202 Accepted**。
+
+- 校验文件：`https://inforadar.xin/6c1251d53cc84103413cf3db781d93f0.txt`
+- 提交脚本：`python docs\audit\submit_indexnow.py [url...]`
+- IndexNow 会把 URL 分发给 Bing、Yandex、Seznam、Naver 等参与方
+
+**仍可选的加分项**（需要登录，但只影响"能看到数据"，不影响"已提交"）：
+
+<https://www.bing.com/webmasters> → 可直接**从 Google Search Console 导入**（建议等第 2 步做完再导）。
+Bing 后台能看到抓取状态和索引量；Bing 的索引也会喂给 ChatGPT 搜索等下游。
+
+> 后续每次有新内容要推送时，运行 `python docs\audit\submit_indexnow.py <url>` 即可。
+> 目前只有一个可提交 URL `/`，等 P0-1（`/a/{id}`）落地后这个脚本才真正有用。
 
 ### 4. 做一个决策：要不要让百度收录
 
@@ -89,13 +105,25 @@ curl.exe -s -o NUL -w "%{http_code}`n" https://inforadar.xin/robots.txt
 curl.exe -s -o NUL -w "%{http_code}`n" https://inforadar.xin/sitemap.xml
 curl.exe -s -o NUL -w "%{http_code}`n" https://inforadar.xin/feed.xml
 
-# 公网 robots.txt 是否已经带上 Sitemap 行（缓存刷新后才会 true）
+# 公网 robots.txt 是否已带上 Sitemap 行（现已生效）
 curl.exe -s https://inforadar.xin/robots.txt | Select-String "Sitemap:"
+
+# IndexNow 校验文件
+curl.exe -s -o NUL -w "%{http_code}`n" https://inforadar.xin/6c1251d53cc84103413cf3db781d93f0.txt
+
+# 用搜索引擎的 UA 自测（排除被 Cloudflare 拦的可能）
+curl.exe -s -o NUL -w "%{http_code}`n" -A "Mozilla/5.0 (compatible; Googlebot/2.1)" https://inforadar.xin/
+curl.exe -s -o NUL -w "%{http_code}`n" -A "Mozilla/5.0 (compatible; bingbot/2.0)" https://inforadar.xin/
+
+# 重新推送 URL 给 IndexNow（有新内容时用）
+python docs\audit\submit_indexnow.py https://inforadar.xin/
 
 # 本地回归
 python docs\audit\test_feeds.py
 python docs\audit\verify_report_claims.py
 ```
+
+> 注意：Cloudflare 会拦裸 `Python-urllib` 的 UA（返回 403），自测时记得带 `-A`。
 
 ---
 
